@@ -112,7 +112,7 @@ def sample_report() -> MatchReport:
 def sample_response(sample_report: MatchReport) -> MatchResponse:
     return MatchResponse(
         report=sample_report,
-        model_used="gemini-2.0-flash",
+        model_used="llama-3.3-70b-versatile",
         processing_time_ms=950,
     )
 
@@ -152,11 +152,13 @@ def sample_docx_bytes() -> bytes:
 
 @pytest.fixture()
 def make_api_message():
-    """Factory: return a fake Gemini API response wrapping *text*."""
+    """Factory: return a fake Groq/OpenAI chat completion wrapping *text*."""
 
     def _factory(text: str) -> MagicMock:
+        choice = MagicMock()
+        choice.message.content = text
         resp = MagicMock()
-        resp.text = text
+        resp.choices = [choice]
         return resp
 
     return _factory

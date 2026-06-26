@@ -9,9 +9,10 @@ def get_settings() -> Settings:
     return Settings()
 
 
+@lru_cache(maxsize=1)
 def get_matcher_service() -> MatcherService:
     settings = get_settings()
     return MatcherService(
-        gemini_api_key=settings.gemini_api_key,
-        model=settings.gemini_model,
+        groq_api_key=settings.groq_api_key,
+        model=settings.groq_model,
     )

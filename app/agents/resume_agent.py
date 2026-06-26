@@ -3,8 +3,7 @@ import logging
 import re
 import time
 
-from google import genai
-from google.genai import errors as genai_errors
+import openai
 
 from app.models.response import MatchReport
 
@@ -13,7 +12,7 @@ logger = logging.getLogger(__name__)
 _MAX_RETRIES = 3
 _BACKOFF_BASE = 1.0  # seconds; delay = base * 2^attempt
 
-# Gemini HTTP status codes that are safe to retry
+# HTTP status codes that are safe to retry
 _RETRYABLE_STATUS_CODES = frozenset({429, 500, 502, 503})
 
 _SYSTEM_PROMPT = """\
@@ -61,12 +60,12 @@ class AgentError(Exception):
 
 
 class ResumeMatchAgent:
-    def __init__(self, client: genai.Client, model: str) -> None:
+    def __init__(self, client: openai.OpenAI, model: str) -> None:
         self._client = client
         self._model = model
 
     def run(self, resume_text: str, job_description: str) -> MatchReport:
-        """Call Gemini and return a validated MatchReport.
+        """Call Groq and return a validated MatchReport.
 
         Retries up to _MAX_RETRIES times on transient API errors with
         exponential backoff (1 s, 2 s).
@@ -78,23 +77,34 @@ class ResumeMatchAgent:
                 raw = self._call_api(resume_text, job_description)
                 return self._parse_report(raw)
 
-            except genai_errors.APIError as exc:
-                if exc.code not in _RETRYABLE_STATUS_CODES:
+            except openai.APIStatusError as exc:
+                if exc.status_code not in _RETRYABLE_STATUS_CODES:
                     raise AgentError(
-                        f"Gemini API error {exc.code}: {exc.message}"
+                        f"Groq API error {exc.status_code}: {exc.message}"
                     ) from exc
                 last_exc = exc
                 logger.warning(
-                    "Gemini API returned %s (attempt %d/%d) — retrying",
-                    exc.code,
+                    "Groq API returned %s (attempt %d/%d) — retrying",
+                    exc.status_code,
+                    attempt + 1,
+                    _MAX_RETRIES,
+                )
+
+            except openai.APIConnectionError as exc:
+                # Covers APITimeoutError too (it's a subclass)
+                last_exc = exc
+                logger.warning(
+                    "Transient Groq error: %s (attempt %d/%d) — retrying",
+                    exc,
                     attempt + 1,
                     _MAX_RETRIES,
                 )
 
             except AgentError:
                 raise
+
             except Exception as exc:
-                # Bad model output or unexpected SDK error — not retryable, fail fast
+                # Bad model output — not retryable, fail fast
                 raise AgentError(f"Failed to parse model response: {exc}") from exc
 
             if attempt < _MAX_RETRIES - 1:
@@ -103,27 +113,30 @@ class ResumeMatchAgent:
                 time.sleep(delay)
 
         raise AgentError(
-            f"Gemini API failed after {_MAX_RETRIES} attempts: {last_exc}"
+            f"Groq API failed after {_MAX_RETRIES} attempts: {last_exc}"
         ) from last_exc
 
     # ── private helpers ────────────────────────────────────────────────────────
 
     def _call_api(self, resume_text: str, job_description: str) -> str:
-        response = self._client.models.generate_content(
+        response = self._client.chat.completions.create(
             model=self._model,
-            contents=_USER_TEMPLATE.format(resume=resume_text, jd=job_description),
-            config=genai.types.GenerateContentConfig(
-                system_instruction=_SYSTEM_PROMPT,
-                max_output_tokens=2048,
-            ),
+            messages=[
+                {"role": "system", "content": _SYSTEM_PROMPT},
+                {
+                    "role": "user",
+                    "content": _USER_TEMPLATE.format(
+                        resume=resume_text,
+                        jd=job_description,
+                    ),
+                },
+            ],
+            max_tokens=2048,
         )
-        if response.text is None:
-            # Happens when Gemini's safety filters block the entire response.
-            raise AgentError(
-                "Failed to parse model response: Gemini returned no text "
-                "(content may have been blocked by safety filters)"
-            )
-        return response.text
+        content = response.choices[0].message.content
+        if content is None:
+            raise AgentError("Model returned no content")
+        return content
 
     def _parse_report(self, text: str) -> MatchReport:
         data = _extract_json(text)

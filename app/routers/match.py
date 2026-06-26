@@ -40,7 +40,7 @@ async def match_text(
     service: MatcherService = Depends(get_matcher_service),
 ) -> MatchResponse:
     start = time.monotonic()
-    logger.info("POST /match/text received — calling Gemini")
+    logger.info("POST /match/text received — calling Groq")
     try:
         result = await asyncio.to_thread(
             service.match,

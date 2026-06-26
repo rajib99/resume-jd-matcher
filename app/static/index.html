@@ -389,7 +389,7 @@
 <header>
   <div class="logo-mark">✦</div>
   <h1>Resume JD Matcher</h1>
-  <span class="header-pill">Gemini AI</span>
+  <span class="header-pill">Groq AI</span>
   <nav class="header-right">
     <a class="header-link" href="/docs" target="_blank">API Docs</a>
     <a class="header-link" href="/redoc" target="_blank">ReDoc</a>
@@ -529,7 +529,7 @@
 <!-- Spinner overlay -->
 <div id="spinner" hidden>
   <div class="spin-ring"></div>
-  <div class="spin-label">Analysing with Gemini…</div>
+  <div class="spin-label">Analysing with Groq…</div>
 </div>
 
 <!-- Toast container -->
@@ -624,6 +624,7 @@ function clearFile(side) {
 async function handleSubmit() {
   const resumeMode = activeMode('resume');
   const jdMode     = activeMode('jd');
+  console.log('[matcher] handleSubmit called, modes:', resumeMode, jdMode);
 
   let endpoint, body, headers = {};
 
@@ -634,6 +635,7 @@ async function handleSubmit() {
     body = new FormData();
     body.append('resume_file', files.resume);
     body.append('jd_file',     files.jd);
+    console.log('[matcher] upload mode — resume:', files.resume.name, 'jd:', files.jd.name);
 
   } else if (resumeMode === 'text' && jdMode === 'text') {
     const rt = document.getElementById('resume-text').value.trim();
@@ -645,25 +647,48 @@ async function handleSubmit() {
     endpoint = '/api/v1/match/text';
     body = JSON.stringify({ resume: rt, job_description: jt });
     headers['Content-Type'] = 'application/json';
+    console.log('[matcher] text mode — resume chars:', rt.length, 'jd chars:', jt.length);
 
   } else {
     toast('Set both panels to the same mode — either both Text or both File.');
     return;
   }
 
+  console.log('[matcher] sending POST to', endpoint);
   setLoading(true);
 
+  const controller = new AbortController();
+  const timer = setTimeout(() => {
+    console.warn('[matcher] fetch timed out after 30 s — aborting');
+    controller.abort();
+  }, 30000);
+
   try {
-    const resp = await fetch(endpoint, { method: 'POST', body, headers });
+    console.log('[matcher] fetch started at', new Date().toISOString());
+    const resp = await fetch(endpoint, { method: 'POST', body, headers, signal: controller.signal });
+    clearTimeout(timer);
+    console.log('[matcher] response received — status:', resp.status, resp.statusText);
+
     if (!resp.ok) {
       const err = await resp.json().catch(() => null);
+      console.error('[matcher] server error body:', err);
       const msg = err?.detail ?? `Server error ${resp.status}`;
       throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
     }
-    renderResults(await resp.json());
+
+    const data = await resp.json();
+    console.log('[matcher] success — score:', data?.report?.overall_match_score,
+                'model:', data?.model_used, 'ms:', data?.processing_time_ms);
+    renderResults(data);
   } catch (err) {
-    toast(err.message || 'Unexpected error — check the console.');
+    clearTimeout(timer);
+    console.error('[matcher] caught error:', err.name, err.message, err);
+    const msg = err.name === 'AbortError'
+      ? 'Request timed out (30 s) — check the server terminal for errors.'
+      : (err.message || 'Unexpected error — check the console.');
+    toast(msg);
   } finally {
+    console.log('[matcher] setLoading(false)');
     setLoading(false);
   }
 }

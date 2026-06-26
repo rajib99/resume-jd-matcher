@@ -56,8 +56,8 @@ jobs:
 
       - name: Test — pytest + coverage
         env:
-          # Real key not needed: all Gemini calls are mocked in the suite.
-          GEMINI_API_KEY: test-ci-key
+          # Real key not needed: all Groq calls are mocked in the suite.
+          GROQ_API_KEY: test-ci-key
         run: pytest
         # pytest.ini enforces --cov=app --cov-fail-under=80 automatically.
 

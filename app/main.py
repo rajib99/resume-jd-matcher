@@ -1,4 +1,5 @@
 import logging
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -16,12 +17,28 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s %(message)s",
 )
 
+logger = logging.getLogger(__name__)
+
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    from app.dependencies import get_matcher_service, get_settings
+    s = get_settings()
+    if not s.groq_api_key:
+        logger.warning(
+            "GROQ_API_KEY is not set. Get a free key at https://console.groq.com/"
+        )
+    get_matcher_service()  # pre-warm — surfaces init errors at startup
+    logger.info("MatcherService ready (model=%s)", s.groq_model)
+    yield
+
+
 app = FastAPI(
     title="Resume JD Matcher",
     description="AI agent that matches a resume against a job description and returns a structured match report.",
     version="1.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
+    lifespan=_lifespan,
 )
 
 app.add_middleware(

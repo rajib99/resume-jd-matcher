@@ -1,17 +1,20 @@
 import time
 
-from google import genai
+import openai
 
 from app.agents.resume_agent import ResumeMatchAgent
 from app.models.response import MatchResponse
 from app.services.parser import parse_job_description, parse_resume
 
+_GROQ_BASE_URL = "https://api.groq.com/openai/v1"
+
 
 class MatcherService:
-    def __init__(self, gemini_api_key: str, model: str) -> None:
-        client = genai.Client(
-            api_key=gemini_api_key,
-            http_options=genai.types.HttpOptions(timeout=30),
+    def __init__(self, groq_api_key: str, model: str) -> None:
+        client = openai.OpenAI(
+            api_key=groq_api_key,
+            base_url=_GROQ_BASE_URL,
+            timeout=30.0,
         )
         self._agent = ResumeMatchAgent(client=client, model=model)
         self._model = model
