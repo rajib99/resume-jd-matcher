@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import time
 
@@ -39,8 +40,10 @@ async def match_text(
     service: MatcherService = Depends(get_matcher_service),
 ) -> MatchResponse:
     start = time.monotonic()
+    logger.info("POST /match/text received — calling Gemini")
     try:
-        result = service.match(
+        result = await asyncio.to_thread(
+            service.match,
             resume_text=payload.resume,
             job_description=payload.job_description,
         )
@@ -96,7 +99,11 @@ async def match_upload(
     _validate_min_length(jd_text, "jd_file", min_chars=50)
 
     try:
-        result = service.match(resume_text=resume_text, job_description=jd_text)
+        result = await asyncio.to_thread(
+            service.match,
+            resume_text=resume_text,
+            job_description=jd_text,
+        )
     except Exception as exc:
         logger.error("match/upload agent error: %s", exc)
         raise HTTPException(

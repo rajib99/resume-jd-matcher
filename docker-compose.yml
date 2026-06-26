@@ -7,9 +7,9 @@ services:
     restart: unless-stopped
     environment:
       # Required — compose will refuse to start if this is unset or empty
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:?ANTHROPIC_API_KEY must be set in the environment}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:?GEMINI_API_KEY must be set in the environment}
       # Optional overrides — sensible production defaults shown
-      CLAUDE_MODEL:  ${CLAUDE_MODEL:-claude-sonnet-4-6}
+      GEMINI_MODEL:  ${GEMINI_MODEL:-gemini-2.0-flash}
       LOG_LEVEL:     ${LOG_LEVEL:-INFO}
       ENVIRONMENT:   ${ENVIRONMENT:-production}
     networks:

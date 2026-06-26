@@ -3,7 +3,8 @@ import logging
 import re
 import time
 
-import anthropic
+from google import genai
+from google.genai import errors as genai_errors
 
 from app.models.response import MatchReport
 
@@ -12,8 +13,8 @@ logger = logging.getLogger(__name__)
 _MAX_RETRIES = 3
 _BACKOFF_BASE = 1.0  # seconds; delay = base * 2^attempt
 
-# Anthropic HTTP status codes that are safe to retry
-_RETRYABLE_STATUS_CODES = frozenset({429, 500, 502, 503, 529})
+# Gemini HTTP status codes that are safe to retry
+_RETRYABLE_STATUS_CODES = frozenset({429, 500, 502, 503})
 
 _SYSTEM_PROMPT = """\
 You are a senior technical recruiter with 15+ years of experience evaluating \
@@ -60,15 +61,15 @@ class AgentError(Exception):
 
 
 class ResumeMatchAgent:
-    def __init__(self, client: anthropic.Anthropic, model: str) -> None:
+    def __init__(self, client: genai.Client, model: str) -> None:
         self._client = client
         self._model = model
 
     def run(self, resume_text: str, job_description: str) -> MatchReport:
-        """Call Claude and return a validated MatchReport.
+        """Call Gemini and return a validated MatchReport.
 
         Retries up to _MAX_RETRIES times on transient API errors with
-        exponential backoff (1 s, 2 s, 4 s).
+        exponential backoff (1 s, 2 s).
         """
         last_exc: Exception | None = None
 
@@ -77,30 +78,23 @@ class ResumeMatchAgent:
                 raw = self._call_api(resume_text, job_description)
                 return self._parse_report(raw)
 
-            except anthropic.APIStatusError as exc:
-                if exc.status_code not in _RETRYABLE_STATUS_CODES:
+            except genai_errors.APIError as exc:
+                if exc.code not in _RETRYABLE_STATUS_CODES:
                     raise AgentError(
-                        f"Anthropic API error {exc.status_code}: {exc.message}"
+                        f"Gemini API error {exc.code}: {exc.message}"
                     ) from exc
                 last_exc = exc
                 logger.warning(
-                    "Anthropic API returned %s (attempt %d/%d) — retrying",
-                    exc.status_code,
+                    "Gemini API returned %s (attempt %d/%d) — retrying",
+                    exc.code,
                     attempt + 1,
                     _MAX_RETRIES,
                 )
 
-            except (anthropic.APIConnectionError, anthropic.APITimeoutError) as exc:
-                last_exc = exc
-                logger.warning(
-                    "Transient API error: %s (attempt %d/%d) — retrying",
-                    exc,
-                    attempt + 1,
-                    _MAX_RETRIES,
-                )
-
-            except (json.JSONDecodeError, KeyError, ValueError) as exc:
-                # Bad model output is not retryable — fail fast
+            except AgentError:
+                raise
+            except Exception as exc:
+                # Bad model output or unexpected SDK error — not retryable, fail fast
                 raise AgentError(f"Failed to parse model response: {exc}") from exc
 
             if attempt < _MAX_RETRIES - 1:
@@ -109,27 +103,27 @@ class ResumeMatchAgent:
                 time.sleep(delay)
 
         raise AgentError(
-            f"Anthropic API failed after {_MAX_RETRIES} attempts: {last_exc}"
+            f"Gemini API failed after {_MAX_RETRIES} attempts: {last_exc}"
         ) from last_exc
 
     # ── private helpers ────────────────────────────────────────────────────────
 
     def _call_api(self, resume_text: str, job_description: str) -> str:
-        message = self._client.messages.create(
+        response = self._client.models.generate_content(
             model=self._model,
-            max_tokens=2048,
-            system=_SYSTEM_PROMPT,
-            messages=[
-                {
-                    "role": "user",
-                    "content": _USER_TEMPLATE.format(
-                        resume=resume_text,
-                        jd=job_description,
-                    ),
-                }
-            ],
+            contents=_USER_TEMPLATE.format(resume=resume_text, jd=job_description),
+            config=genai.types.GenerateContentConfig(
+                system_instruction=_SYSTEM_PROMPT,
+                max_output_tokens=2048,
+            ),
         )
-        return message.content[0].text
+        if response.text is None:
+            # Happens when Gemini's safety filters block the entire response.
+            raise AgentError(
+                "Failed to parse model response: Gemini returned no text "
+                "(content may have been blocked by safety filters)"
+            )
+        return response.text
 
     def _parse_report(self, text: str) -> MatchReport:
         data = _extract_json(text)

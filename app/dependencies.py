@@ -12,6 +12,6 @@ def get_settings() -> Settings:
 def get_matcher_service() -> MatcherService:
     settings = get_settings()
     return MatcherService(
-        anthropic_api_key=settings.anthropic_api_key,
-        model=settings.claude_model,
+        gemini_api_key=settings.gemini_api_key,
+        model=settings.gemini_model,
     )

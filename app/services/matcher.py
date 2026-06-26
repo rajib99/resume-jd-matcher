@@ -1,6 +1,6 @@
 import time
 
-import anthropic
+from google import genai
 
 from app.agents.resume_agent import ResumeMatchAgent
 from app.models.response import MatchResponse
@@ -8,8 +8,11 @@ from app.services.parser import parse_job_description, parse_resume
 
 
 class MatcherService:
-    def __init__(self, anthropic_api_key: str, model: str) -> None:
-        client = anthropic.Anthropic(api_key=anthropic_api_key)
+    def __init__(self, gemini_api_key: str, model: str) -> None:
+        client = genai.Client(
+            api_key=gemini_api_key,
+            http_options=genai.types.HttpOptions(timeout=30),
+        )
         self._agent = ResumeMatchAgent(client=client, model=model)
         self._model = model
 

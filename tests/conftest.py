@@ -112,7 +112,7 @@ def sample_report() -> MatchReport:
 def sample_response(sample_report: MatchReport) -> MatchResponse:
     return MatchResponse(
         report=sample_report,
-        model_used="claude-sonnet-4-6",
+        model_used="gemini-2.0-flash",
         processing_time_ms=950,
     )
 
@@ -152,12 +152,12 @@ def sample_docx_bytes() -> bytes:
 
 @pytest.fixture()
 def make_api_message():
-    """Factory: return a fake Anthropic API message wrapping *text*."""
+    """Factory: return a fake Gemini API response wrapping *text*."""
 
     def _factory(text: str) -> MagicMock:
-        msg = MagicMock()
-        msg.content = [MagicMock(text=text)]
-        return msg
+        resp = MagicMock()
+        resp.text = text
+        return resp
 
     return _factory
 

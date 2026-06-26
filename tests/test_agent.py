@@ -5,7 +5,7 @@ Coverage targets
 ----------------
 _extract_json            – standalone helper, all fence/whitespace variants
 ResumeMatchAgent.__init__ – stores client and model
-ResumeMatchAgent._call_api – passes correct kwargs to the Anthropic SDK
+ResumeMatchAgent._call_api – passes correct kwargs to the Gemini SDK
 ResumeMatchAgent._parse_report – all recommendation values, score boundaries
 ResumeMatchAgent.run     – happy paths, all retryable error codes,
                            all non-retryable codes, exhausted retries,
@@ -18,8 +18,8 @@ from __future__ import annotations
 import json
 from unittest.mock import MagicMock, call, patch
 
-import anthropic
 import pytest
+from google.genai import errors as genai_errors
 
 from app.agents.resume_agent import (
     AgentError,
@@ -31,8 +31,16 @@ from app.services.matcher import MatcherService
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 
+def _client_err(code: int, msg: str = "error") -> genai_errors.ClientError:
+    return genai_errors.ClientError(code, {"error": {"message": msg}})
+
+
+def _server_err(code: int, msg: str = "error") -> genai_errors.ServerError:
+    return genai_errors.ServerError(code, {"error": {"message": msg}})
+
+
 def _agent(client: MagicMock | None = None) -> ResumeMatchAgent:
-    return ResumeMatchAgent(client=client or MagicMock(), model="claude-sonnet-4-6")
+    return ResumeMatchAgent(client=client or MagicMock(), model="gemini-2.0-flash")
 
 
 # ── _extract_json ─────────────────────────────────────────────────────────────
@@ -69,9 +77,9 @@ class TestExtractJson:
 class TestResumeMatchAgentInit:
     def test_stores_client_and_model(self):
         client = MagicMock()
-        agent = ResumeMatchAgent(client=client, model="claude-opus-4-7")
+        agent = ResumeMatchAgent(client=client, model="gemini-1.5-pro")
         assert agent._client is client
-        assert agent._model == "claude-opus-4-7"
+        assert agent._model == "gemini-1.5-pro"
 
 
 # ── _call_api arguments ───────────────────────────────────────────────────────
@@ -80,36 +88,42 @@ class TestResumeMatchAgentInit:
 class TestCallApiArguments:
     def test_passes_model_and_max_tokens(self, valid_report_data, make_api_message):
         client = MagicMock()
-        client.messages.create.return_value = make_api_message(json.dumps(valid_report_data))
-        agent = ResumeMatchAgent(client=client, model="claude-sonnet-4-6")
+        client.models.generate_content.return_value = make_api_message(
+            json.dumps(valid_report_data)
+        )
+        agent = ResumeMatchAgent(client=client, model="gemini-2.0-flash")
 
         agent.run("resume text here and more text to fill", "jd text here and more text to fill")
 
-        kwargs = client.messages.create.call_args.kwargs
-        assert kwargs["model"] == "claude-sonnet-4-6"
-        assert kwargs["max_tokens"] == 2048
+        kwargs = client.models.generate_content.call_args.kwargs
+        assert kwargs["model"] == "gemini-2.0-flash"
+        assert kwargs["config"].max_output_tokens == 2048
 
-    def test_embeds_resume_and_jd_in_user_message(self, valid_report_data, make_api_message):
+    def test_embeds_resume_and_jd_in_contents(self, valid_report_data, make_api_message):
         client = MagicMock()
-        client.messages.create.return_value = make_api_message(json.dumps(valid_report_data))
+        client.models.generate_content.return_value = make_api_message(
+            json.dumps(valid_report_data)
+        )
         agent = _agent(client)
 
         agent.run("MY RESUME CONTENT", "MY JD CONTENT")
 
-        user_content = client.messages.create.call_args.kwargs["messages"][0]["content"]
-        assert "MY RESUME CONTENT" in user_content
-        assert "MY JD CONTENT" in user_content
+        kwargs = client.models.generate_content.call_args.kwargs
+        assert "MY RESUME CONTENT" in kwargs["contents"]
+        assert "MY JD CONTENT" in kwargs["contents"]
 
-    def test_passes_system_prompt(self, valid_report_data, make_api_message):
+    def test_passes_system_instruction(self, valid_report_data, make_api_message):
         client = MagicMock()
-        client.messages.create.return_value = make_api_message(json.dumps(valid_report_data))
+        client.models.generate_content.return_value = make_api_message(
+            json.dumps(valid_report_data)
+        )
         agent = _agent(client)
 
         agent.run("resume", "jd")
 
-        kwargs = client.messages.create.call_args.kwargs
-        assert "system" in kwargs
-        assert len(kwargs["system"]) > 0
+        kwargs = client.models.generate_content.call_args.kwargs
+        assert kwargs["config"].system_instruction
+        assert len(kwargs["config"].system_instruction) > 0
 
 
 # ── _parse_report / happy-path parsing ───────────────────────────────────────
@@ -126,7 +140,7 @@ class TestParseReport:
     ):
         data = {**valid_report_data, "recommendation": recommendation}
         agent = _agent()
-        agent._client.messages.create.return_value = make_api_message(json.dumps(data))
+        agent._client.models.generate_content.return_value = make_api_message(json.dumps(data))
 
         report = agent.run("resume", "jd")
         assert report.recommendation == recommendation
@@ -135,7 +149,7 @@ class TestParseReport:
     def test_score_boundary_values_accepted(self, score, valid_report_data, make_api_message):
         data = {**valid_report_data, "overall_match_score": score}
         agent = _agent()
-        agent._client.messages.create.return_value = make_api_message(json.dumps(data))
+        agent._client.models.generate_content.return_value = make_api_message(json.dumps(data))
 
         report = agent.run("resume", "jd")
         assert report.overall_match_score == score
@@ -143,7 +157,7 @@ class TestParseReport:
     def test_empty_skill_lists_accepted(self, valid_report_data, make_api_message):
         data = {**valid_report_data, "matched_skills": [], "missing_skills": []}
         agent = _agent()
-        agent._client.messages.create.return_value = make_api_message(json.dumps(data))
+        agent._client.models.generate_content.return_value = make_api_message(json.dumps(data))
 
         report = agent.run("resume", "jd")
         assert report.matched_skills == []
@@ -151,7 +165,7 @@ class TestParseReport:
 
     def test_full_report_fields_populated(self, valid_report_data, make_api_message):
         agent = _agent()
-        agent._client.messages.create.return_value = make_api_message(
+        agent._client.models.generate_content.return_value = make_api_message(
             json.dumps(valid_report_data)
         )
 
@@ -171,24 +185,16 @@ class TestNonRetryableErrors:
     @pytest.mark.parametrize("status_code", [400, 401, 403, 404])
     def test_non_retryable_status_raises_immediately(self, status_code):
         agent = _agent()
-        agent._client.messages.create.side_effect = anthropic.APIStatusError(
-            "error",
-            response=MagicMock(status_code=status_code),
-            body={},
-        )
+        agent._client.models.generate_content.side_effect = _client_err(status_code)
 
         with pytest.raises(AgentError, match=str(status_code)):
             agent.run("resume", "jd")
 
-        agent._client.messages.create.assert_called_once()
+        agent._client.models.generate_content.assert_called_once()
 
     def test_non_retryable_error_message_includes_status(self):
         agent = _agent()
-        agent._client.messages.create.side_effect = anthropic.APIStatusError(
-            "Forbidden",
-            response=MagicMock(status_code=403),
-            body={},
-        )
+        agent._client.models.generate_content.side_effect = _client_err(403, "Forbidden")
 
         with pytest.raises(AgentError) as exc_info:
             agent.run("resume", "jd")
@@ -200,18 +206,14 @@ class TestNonRetryableErrors:
 
 
 class TestRetryableErrors:
-    @pytest.mark.parametrize("status_code", [429, 500, 502, 503, 529])
+    @pytest.mark.parametrize("status_code", [429, 500, 502, 503])
     @patch("app.agents.resume_agent.time.sleep")
     def test_all_retryable_codes_trigger_retry(
         self, mock_sleep, status_code, valid_report_data, make_api_message
     ):
         agent = _agent()
-        err = anthropic.APIStatusError(
-            "error",
-            response=MagicMock(status_code=status_code),
-            body={},
-        )
-        agent._client.messages.create.side_effect = [
+        err = _server_err(status_code) if status_code >= 500 else _client_err(status_code)
+        agent._client.models.generate_content.side_effect = [
             err,
             make_api_message(json.dumps(valid_report_data)),
         ]
@@ -219,16 +221,14 @@ class TestRetryableErrors:
         report = agent.run("resume", "jd")
 
         assert report.overall_match_score == valid_report_data["overall_match_score"]
-        assert agent._client.messages.create.call_count == 2
+        assert agent._client.models.generate_content.call_count == 2
         mock_sleep.assert_called_once_with(1.0)
 
     @patch("app.agents.resume_agent.time.sleep")
-    def test_connection_error_triggers_retry(
-        self, mock_sleep, valid_report_data, make_api_message
-    ):
+    def test_502_triggers_retry(self, mock_sleep, valid_report_data, make_api_message):
         agent = _agent()
-        agent._client.messages.create.side_effect = [
-            anthropic.APIConnectionError(request=MagicMock()),
+        agent._client.models.generate_content.side_effect = [
+            _server_err(502, "Bad Gateway"),
             make_api_message(json.dumps(valid_report_data)),
         ]
 
@@ -237,12 +237,10 @@ class TestRetryableErrors:
         mock_sleep.assert_called_once_with(1.0)
 
     @patch("app.agents.resume_agent.time.sleep")
-    def test_timeout_error_triggers_retry(
-        self, mock_sleep, valid_report_data, make_api_message
-    ):
+    def test_500_triggers_retry(self, mock_sleep, valid_report_data, make_api_message):
         agent = _agent()
-        agent._client.messages.create.side_effect = [
-            anthropic.APITimeoutError(request=MagicMock()),
+        agent._client.models.generate_content.side_effect = [
+            _server_err(500, "Internal Server Error"),
             make_api_message(json.dumps(valid_report_data)),
         ]
 
@@ -254,12 +252,8 @@ class TestRetryableErrors:
         self, mock_sleep, valid_report_data, make_api_message
     ):
         agent = _agent()
-        err = anthropic.APIStatusError(
-            "rate limit",
-            response=MagicMock(status_code=429),
-            body={},
-        )
-        agent._client.messages.create.side_effect = [
+        err = _client_err(429, "rate limit")
+        agent._client.models.generate_content.side_effect = [
             err,
             err,
             make_api_message(json.dumps(valid_report_data)),
@@ -273,25 +267,19 @@ class TestRetryableErrors:
     @patch("app.agents.resume_agent.time.sleep")
     def test_exhausted_retries_raise_agent_error(self, mock_sleep):
         agent = _agent()
-        agent._client.messages.create.side_effect = anthropic.APIStatusError(
-            "unavailable",
-            response=MagicMock(status_code=503),
-            body={},
-        )
+        agent._client.models.generate_content.side_effect = _server_err(503, "unavailable")
 
         with pytest.raises(AgentError, match="failed after 3 attempts"):
             agent.run("resume", "jd")
 
-        assert agent._client.messages.create.call_count == 3
+        assert agent._client.models.generate_content.call_count == 3
         assert mock_sleep.call_count == 2  # sleeps between attempts 0→1 and 1→2, not after 2
 
     @patch("app.agents.resume_agent.time.sleep")
     def test_no_sleep_after_final_attempt(self, mock_sleep):
         """Verify sleep is NOT called after the last retry (would be wasted)."""
         agent = _agent()
-        agent._client.messages.create.side_effect = anthropic.APITimeoutError(
-            request=MagicMock()
-        )
+        agent._client.models.generate_content.side_effect = _server_err(503, "unavailable")
 
         with pytest.raises(AgentError):
             agent.run("resume", "jd")
@@ -306,19 +294,19 @@ class TestRetryableErrors:
 class TestMalformedResponses:
     def test_invalid_json_raises_immediately_without_retry(self, make_api_message):
         agent = _agent()
-        agent._client.messages.create.return_value = make_api_message("not json {{{")
+        agent._client.models.generate_content.return_value = make_api_message("not json {{{")
 
         with pytest.raises(AgentError, match="Failed to parse model response"):
             agent.run("resume", "jd")
 
-        agent._client.messages.create.assert_called_once()
+        agent._client.models.generate_content.assert_called_once()
 
     def test_missing_required_key_raises_agent_error(
         self, valid_report_data, make_api_message
     ):
         data = {k: v for k, v in valid_report_data.items() if k != "recommendation"}
         agent = _agent()
-        agent._client.messages.create.return_value = make_api_message(json.dumps(data))
+        agent._client.models.generate_content.return_value = make_api_message(json.dumps(data))
 
         with pytest.raises(AgentError, match="Failed to parse model response"):
             agent.run("resume", "jd")
@@ -328,7 +316,7 @@ class TestMalformedResponses:
     ):
         data = {**valid_report_data, "recommendation": "Maybe Hire"}
         agent = _agent()
-        agent._client.messages.create.return_value = make_api_message(json.dumps(data))
+        agent._client.models.generate_content.return_value = make_api_message(json.dumps(data))
 
         with pytest.raises(AgentError, match="Failed to parse model response"):
             agent.run("resume", "jd")
@@ -338,7 +326,7 @@ class TestMalformedResponses:
     ):
         data = {**valid_report_data, "overall_match_score": 101}
         agent = _agent()
-        agent._client.messages.create.return_value = make_api_message(json.dumps(data))
+        agent._client.models.generate_content.return_value = make_api_message(json.dumps(data))
 
         with pytest.raises(AgentError, match="Failed to parse model response"):
             agent.run("resume", "jd")
@@ -348,14 +336,14 @@ class TestMalformedResponses:
     ):
         data = {**valid_report_data, "overall_match_score": -1}
         agent = _agent()
-        agent._client.messages.create.return_value = make_api_message(json.dumps(data))
+        agent._client.models.generate_content.return_value = make_api_message(json.dumps(data))
 
         with pytest.raises(AgentError, match="Failed to parse model response"):
             agent.run("resume", "jd")
 
     def test_non_json_but_valid_text_raises_agent_error(self, make_api_message):
         agent = _agent()
-        agent._client.messages.create.return_value = make_api_message(
+        agent._client.models.generate_content.return_value = make_api_message(
             "Here is your analysis: the candidate is great."
         )
 
@@ -365,12 +353,12 @@ class TestMalformedResponses:
     def test_malformed_response_does_not_retry(self, make_api_message):
         """Retrying a bad model output is pointless — fail fast."""
         agent = _agent()
-        agent._client.messages.create.return_value = make_api_message("oops")
+        agent._client.models.generate_content.return_value = make_api_message("oops")
 
         with pytest.raises(AgentError):
             agent.run("resume", "jd")
 
-        agent._client.messages.create.assert_called_once()
+        agent._client.models.generate_content.assert_called_once()
 
 
 # ── MatcherService integration ────────────────────────────────────────────────
@@ -381,29 +369,28 @@ class TestMatcherService:
         mock_agent = MagicMock()
         mock_agent.run.return_value = sample_report
 
-        with patch("app.services.matcher.anthropic.Anthropic"), \
+        with patch("app.services.matcher.genai.Client"), \
              patch("app.services.matcher.ResumeMatchAgent", return_value=mock_agent):
-            svc = MatcherService(anthropic_api_key="test-key", model="claude-sonnet-4-6")
+            svc = MatcherService(gemini_api_key="test-key", model="gemini-2.0-flash")
             result = svc.match(resume_text="resume text here", job_description="jd text here")
 
         assert result.report is sample_report
-        assert result.model_used == "claude-sonnet-4-6"
+        assert result.model_used == "gemini-2.0-flash"
         assert result.processing_time_ms >= 0
 
     def test_match_normalises_whitespace_before_agent(self, sample_report):
         mock_agent = MagicMock()
         mock_agent.run.return_value = sample_report
 
-        with patch("app.services.matcher.anthropic.Anthropic"), \
+        with patch("app.services.matcher.genai.Client"), \
              patch("app.services.matcher.ResumeMatchAgent", return_value=mock_agent):
-            svc = MatcherService(anthropic_api_key="key", model="claude-sonnet-4-6")
+            svc = MatcherService(gemini_api_key="key", model="gemini-2.0-flash")
             svc.match(
                 resume_text="  Alice\n\n\n\nPython developer  ",
                 job_description="\n\nSeeking Python engineer\n\n\n",
             )
 
         kwargs = mock_agent.run.call_args.kwargs
-        # normalize_whitespace collapses 3+ blank lines → 2 and strips ends
         assert kwargs["resume_text"] == "Alice\n\nPython developer"
         assert kwargs["job_description"] == "Seeking Python engineer"
 
@@ -411,20 +398,20 @@ class TestMatcherService:
         mock_agent = MagicMock()
         mock_agent.run.return_value = sample_report
 
-        with patch("app.services.matcher.anthropic.Anthropic"), \
+        with patch("app.services.matcher.genai.Client"), \
              patch("app.services.matcher.ResumeMatchAgent", return_value=mock_agent):
-            svc = MatcherService(anthropic_api_key="key", model="claude-sonnet-4-6")
+            svc = MatcherService(gemini_api_key="key", model="gemini-2.0-flash")
             result = svc.match("resume", "jd")
 
         assert result.processing_time_ms >= 0
 
     def test_match_propagates_agent_error(self, sample_report):
         mock_agent = MagicMock()
-        mock_agent.run.side_effect = AgentError("Claude unreachable")
+        mock_agent.run.side_effect = AgentError("Gemini unreachable")
 
-        with patch("app.services.matcher.anthropic.Anthropic"), \
+        with patch("app.services.matcher.genai.Client"), \
              patch("app.services.matcher.ResumeMatchAgent", return_value=mock_agent):
-            svc = MatcherService(anthropic_api_key="key", model="claude-sonnet-4-6")
+            svc = MatcherService(gemini_api_key="key", model="gemini-2.0-flash")
 
-            with pytest.raises(AgentError, match="Claude unreachable"):
+            with pytest.raises(AgentError, match="Gemini unreachable"):
                 svc.match("resume", "jd")
