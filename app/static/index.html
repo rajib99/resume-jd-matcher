@@ -1,0 +1,777 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Resume JD Matcher</title>
+  <style>
+    /* ── Design tokens ──────────────────────────────────────────────────── */
+    :root {
+      --bg:           #0d0f18;
+      --surface:      #161929;
+      --surface-2:    #1c1f35;
+      --border:       #272b45;
+      --border-focus: #6c63ff;
+      --accent:       #6c63ff;
+      --accent-glow:  rgba(108,99,255,.45);
+      --text-1:       #e8eaf2;
+      --text-2:       #9298b0;
+      --text-3:       #555c7a;
+      --green:        #22c55e;
+      --amber:        #f59e0b;
+      --red:          #ef4444;
+      --green-bg:     rgba(34,197,94,.12);
+      --amber-bg:     rgba(245,158,11,.12);
+      --red-bg:       rgba(239,68,68,.12);
+      --r:            10px;
+      --r-sm:         6px;
+      --shadow:       0 8px 32px rgba(0,0,0,.5);
+    }
+
+    /* ── Reset ──────────────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text-1);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      font-size: 14.5px;
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+
+    /* ── Header ─────────────────────────────────────────────────────────── */
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 32px;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      position: sticky; top: 0; z-index: 10;
+    }
+    .logo-mark {
+      width: 30px; height: 30px;
+      background: linear-gradient(135deg, var(--accent) 0%, #a78bfa 100%);
+      border-radius: 7px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 15px; flex-shrink: 0;
+    }
+    header h1 { font-size: 16px; font-weight: 700; letter-spacing: -.3px; }
+    .header-pill {
+      margin-left: 6px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 2px 9px;
+      font-size: 11px;
+      color: var(--text-2);
+    }
+    .header-right {
+      margin-left: auto;
+      display: flex; gap: 8px;
+    }
+    .header-link {
+      font-size: 12px; color: var(--text-2);
+      text-decoration: none;
+      padding: 4px 10px;
+      border-radius: var(--r-sm);
+      transition: background .15s, color .15s;
+    }
+    .header-link:hover { background: var(--surface-2); color: var(--text-1); }
+
+    /* ── Main layout ─────────────────────────────────────────────────────── */
+    main { max-width: 1160px; margin: 0 auto; padding: 32px 24px 64px; }
+
+    .page-intro {
+      text-align: center;
+      margin-bottom: 32px;
+    }
+    .page-intro h2 {
+      font-size: 26px; font-weight: 800; letter-spacing: -.5px;
+      background: linear-gradient(135deg, var(--text-1) 40%, var(--accent));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .page-intro p { color: var(--text-2); margin-top: 6px; font-size: 14px; }
+
+    /* ── Input panels ────────────────────────────────────────────────────── */
+    .panels {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      transition: border-color .2s;
+    }
+    .panel:focus-within { border-color: var(--border-focus); }
+
+    .panel-head {
+      display: flex; align-items: center; gap: 8px;
+    }
+    .panel-icon {
+      width: 26px; height: 26px;
+      border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px; flex-shrink: 0;
+    }
+    .panel-icon--resume { background: rgba(108,99,255,.15); }
+    .panel-icon--jd     { background: rgba(34,197,94,.15); }
+    .panel-head h2 { font-size: 14px; font-weight: 600; }
+
+    /* Mode toggle */
+    .mode-toggle {
+      margin-left: auto;
+      display: flex; background: var(--bg);
+      border-radius: 6px; padding: 3px; gap: 2px;
+    }
+    .mode-btn {
+      padding: 4px 11px; border: none;
+      background: transparent; color: var(--text-2);
+      font-size: 12px; border-radius: 4px; cursor: pointer;
+      transition: all .15s;
+    }
+    .mode-btn.active {
+      background: var(--surface-2); color: var(--text-1);
+      box-shadow: 0 1px 4px rgba(0,0,0,.35);
+    }
+
+    /* Textarea */
+    textarea {
+      width: 100%; height: 210px;
+      background: var(--bg); border: 1px solid var(--border);
+      border-radius: var(--r-sm); color: var(--text-1);
+      font-family: inherit; font-size: 13px; line-height: 1.65;
+      padding: 11px 13px; resize: vertical;
+      transition: border-color .15s;
+    }
+    textarea:focus { outline: none; border-color: var(--border-focus); }
+    textarea::placeholder { color: var(--text-3); }
+    textarea:disabled { opacity: .35; cursor: not-allowed; resize: none; }
+
+    /* File drop zone */
+    .file-zone {
+      border: 1.5px dashed var(--border);
+      border-radius: var(--r-sm);
+      min-height: 210px;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 4px; text-align: center;
+      cursor: pointer; user-select: none;
+      transition: all .15s; padding: 24px;
+    }
+    .file-zone:hover, .file-zone.drag-over {
+      border-color: var(--accent);
+      background: rgba(108,99,255,.06);
+    }
+    .file-zone.has-file {
+      border-color: var(--green); border-style: solid;
+      background: var(--green-bg);
+    }
+    .fz-icon { font-size: 28px; margin-bottom: 4px; }
+    .fz-primary { font-size: 13px; color: var(--text-2); }
+    .fz-primary strong { color: var(--accent); }
+    .fz-hint { font-size: 11px; color: var(--text-3); }
+    .fz-selected {
+      display: flex; align-items: center; gap: 7px;
+      font-size: 13px; font-weight: 500; color: var(--green);
+    }
+    .fz-clear {
+      background: none; border: none; cursor: pointer;
+      color: var(--text-3); font-size: 15px; line-height: 1;
+      padding: 0 2px; transition: color .15s;
+    }
+    .fz-clear:hover { color: var(--red); }
+    input[type="file"] { display: none; }
+
+    /* ── Submit row ──────────────────────────────────────────────────────── */
+    .submit-row {
+      display: flex; justify-content: center;
+      margin-top: 22px;
+    }
+    #match-btn {
+      background: linear-gradient(135deg, var(--accent), #a78bfa);
+      color: #fff; border: none; border-radius: 10px;
+      padding: 13px 52px; font-size: 15px; font-weight: 700;
+      cursor: pointer; letter-spacing: .2px;
+      box-shadow: 0 4px 22px var(--accent-glow);
+      transition: all .2s;
+    }
+    #match-btn:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 30px var(--accent-glow);
+    }
+    #match-btn:active:not(:disabled) { transform: translateY(0); }
+    #match-btn:disabled { opacity: .45; cursor: not-allowed; }
+
+    /* ── Spinner overlay ─────────────────────────────────────────────────── */
+    #spinner {
+      position: fixed; inset: 0;
+      background: rgba(13,15,24,.75);
+      backdrop-filter: blur(4px);
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      z-index: 50;
+    }
+    .spin-ring {
+      width: 50px; height: 50px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin .75s linear infinite;
+    }
+    .spin-label { margin-top: 14px; font-size: 13.5px; color: var(--text-2); }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Results ─────────────────────────────────────────────────────────── */
+    #results {
+      margin-top: 44px;
+      animation: rise .35s ease;
+    }
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(14px); }
+      to   { opacity: 1; transform: none; }
+    }
+
+    .results-topbar {
+      display: flex; align-items: center;
+      margin-bottom: 20px; gap: 10px;
+    }
+    .results-title { font-size: 17px; font-weight: 700; }
+    .divider-dot { color: var(--text-3); }
+    #result-meta { font-size: 12px; color: var(--text-3); }
+    .new-search-btn {
+      margin-left: auto;
+      background: var(--surface-2); border: 1px solid var(--border);
+      border-radius: 6px; color: var(--text-2);
+      font-size: 12px; padding: 5px 12px; cursor: pointer;
+      transition: all .15s;
+    }
+    .new-search-btn:hover { background: var(--border); color: var(--text-1); }
+
+    /* Main results grid */
+    .results-layout {
+      display: grid;
+      grid-template-columns: 196px 1fr;
+      gap: 16px;
+      align-items: start;
+    }
+
+    /* Score card */
+    .score-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--r); padding: 22px 16px;
+      display: flex; flex-direction: column;
+      align-items: center; gap: 14px; text-align: center;
+    }
+    .score-kicker {
+      font-size: 11px; color: var(--text-3);
+      text-transform: uppercase; letter-spacing: .9px;
+    }
+
+    /* SVG ring */
+    svg.score-ring { overflow: visible; display: block; }
+    #ring-track { fill: none; stroke: var(--border); stroke-width: 7; }
+    #ring-fill {
+      fill: none; stroke-width: 7; stroke-linecap: round;
+      transform: rotate(-90deg); transform-origin: 50px 50px;
+      stroke-dasharray: 251.33; stroke-dashoffset: 251.33;
+      transition: stroke-dashoffset .9s cubic-bezier(.4,0,.2,1), stroke .4s;
+      filter: drop-shadow(0 0 5px currentColor);
+    }
+    #ring-score {
+      font-size: 27px; font-weight: 800;
+      text-anchor: middle; dominant-baseline: central;
+      font-family: inherit;
+      transition: fill .4s;
+    }
+
+    /* Recommendation badge */
+    .rec-badge {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 5px 13px; border-radius: 20px;
+      font-size: 12px; font-weight: 600;
+    }
+    .rec-badge::before {
+      content: ''; width: 6px; height: 6px;
+      border-radius: 50%; background: currentColor;
+    }
+    .rec-strong   { background: var(--green-bg); color: var(--green); }
+    .rec-moderate { background: var(--amber-bg); color: var(--amber); }
+    .rec-weak     { background: var(--red-bg);   color: var(--red);   }
+
+    /* Details card */
+    .details-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--r); overflow: hidden;
+    }
+    .d-section {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+    }
+    .d-section:last-child { border-bottom: none; }
+    .d-title {
+      font-size: 11px; font-weight: 600; letter-spacing: .9px;
+      text-transform: uppercase; color: var(--text-3);
+      margin-bottom: 10px;
+    }
+    #result-summary { font-size: 13.5px; color: var(--text-1); line-height: 1.75; }
+
+    /* Tag cloud */
+    .tags { display: flex; flex-wrap: wrap; gap: 5px; }
+    .tag {
+      padding: 3px 10px; border-radius: 4px;
+      font-size: 12px; font-weight: 500;
+    }
+    .tag-green { background: var(--green-bg); color: var(--green); }
+    .tag-red   { background: var(--red-bg);   color: var(--red);   }
+    .empty-note { font-size: 12.5px; color: var(--text-3); font-style: italic; }
+
+    /* Split row for strengths + gaps */
+    .sg-grid {
+      display: grid; grid-template-columns: 1fr 1fr;
+    }
+    .sg-grid > .d-section:first-child { border-right: 1px solid var(--border); }
+
+    /* Bullet list */
+    .blist { list-style: none; display: flex; flex-direction: column; gap: 7px; }
+    .blist li {
+      font-size: 13px; color: var(--text-1);
+      padding-left: 16px; position: relative; line-height: 1.55;
+    }
+    .blist li::before {
+      content: ''; position: absolute; left: 0; top: 7px;
+      width: 5px; height: 5px; border-radius: 50%;
+    }
+    #strengths-list li::before { background: var(--green); }
+    #gaps-list li::before      { background: var(--red);   }
+
+    /* ── Toast ───────────────────────────────────────────────────────────── */
+    #toasts {
+      position: fixed; bottom: 22px; right: 22px; z-index: 200;
+      display: flex; flex-direction: column; gap: 8px;
+      pointer-events: none;
+    }
+    .toast {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--r-sm); padding: 11px 15px;
+      font-size: 13px; max-width: 360px;
+      opacity: 0; transform: translateX(18px);
+      transition: opacity .25s ease, transform .25s ease;
+      pointer-events: all; box-shadow: var(--shadow);
+    }
+    .toast.in { opacity: 1; transform: none; }
+    .toast-error   { border-left: 3px solid var(--red);   }
+    .toast-success { border-left: 3px solid var(--green); }
+
+    /* ── Responsive ─────────────────────────────────────────────────────── */
+    @media (max-width: 760px) {
+      .panels         { grid-template-columns: 1fr; }
+      .results-layout { grid-template-columns: 1fr; }
+      .score-card     { flex-direction: row; padding: 16px 20px; }
+      .sg-grid        { grid-template-columns: 1fr; }
+      .sg-grid > .d-section:first-child { border-right: none; }
+      main { padding: 20px 14px 48px; }
+      header { padding: 0 16px; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo-mark">✦</div>
+  <h1>Resume JD Matcher</h1>
+  <span class="header-pill">Claude AI</span>
+  <nav class="header-right">
+    <a class="header-link" href="/docs" target="_blank">API Docs</a>
+    <a class="header-link" href="/redoc" target="_blank">ReDoc</a>
+  </nav>
+</header>
+
+<main>
+  <div class="page-intro">
+    <h2>AI-powered resume matching</h2>
+    <p>Paste text or upload a PDF / DOCX — get a structured match report in seconds.</p>
+  </div>
+
+  <!-- Input panels -->
+  <div class="panels">
+
+    <!-- Resume panel -->
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-icon panel-icon--resume">📄</div>
+        <h2>Resume</h2>
+        <div class="mode-toggle">
+          <button class="mode-btn active" data-side="resume" data-mode="text">Text</button>
+          <button class="mode-btn"        data-side="resume" data-mode="file">File</button>
+        </div>
+      </div>
+      <textarea id="resume-text"
+                placeholder="Paste the candidate's resume here…"></textarea>
+      <div class="file-zone" id="resume-zone" style="display:none">
+        <input type="file" id="resume-file-input" accept=".pdf,.docx">
+        <div id="resume-idle">
+          <div class="fz-icon">☁️</div>
+          <div class="fz-primary">Drop file here or <strong>click to browse</strong></div>
+          <div class="fz-hint">PDF or DOCX · max 5 MB</div>
+        </div>
+        <div id="resume-picked" style="display:none">
+          <div class="fz-selected">
+            <span>✅</span>
+            <span id="resume-fname"></span>
+            <button class="fz-clear" id="resume-clear" title="Remove">✕</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- JD panel -->
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-icon panel-icon--jd">💼</div>
+        <h2>Job Description</h2>
+        <div class="mode-toggle">
+          <button class="mode-btn active" data-side="jd" data-mode="text">Text</button>
+          <button class="mode-btn"        data-side="jd" data-mode="file">File</button>
+        </div>
+      </div>
+      <textarea id="jd-text"
+                placeholder="Paste the job description here…"></textarea>
+      <div class="file-zone" id="jd-zone" style="display:none">
+        <input type="file" id="jd-file-input" accept=".pdf,.docx">
+        <div id="jd-idle">
+          <div class="fz-icon">☁️</div>
+          <div class="fz-primary">Drop file here or <strong>click to browse</strong></div>
+          <div class="fz-hint">PDF or DOCX · max 5 MB</div>
+        </div>
+        <div id="jd-picked" style="display:none">
+          <div class="fz-selected">
+            <span>✅</span>
+            <span id="jd-fname"></span>
+            <button class="fz-clear" id="jd-clear" title="Remove">✕</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- .panels -->
+
+  <div class="submit-row">
+    <button id="match-btn">✦&nbsp; Match Resume</button>
+  </div>
+
+  <!-- Results -->
+  <section id="results" hidden>
+    <div class="results-topbar">
+      <span class="results-title">Match Report</span>
+      <span class="divider-dot">·</span>
+      <span id="result-meta"></span>
+      <button class="new-search-btn" id="new-search-btn">↩ New search</button>
+    </div>
+
+    <div class="results-layout">
+
+      <!-- Score column -->
+      <div class="score-card">
+        <div class="score-kicker">Match Score</div>
+        <svg class="score-ring" width="100" height="100" viewBox="0 0 100 100">
+          <circle id="ring-track" cx="50" cy="50" r="40"/>
+          <circle id="ring-fill"  cx="50" cy="50" r="40"/>
+          <text   id="ring-score" x="50" y="50"></text>
+        </svg>
+        <div id="result-rec" class="rec-badge"></div>
+      </div>
+
+      <!-- Details column -->
+      <div class="details-card">
+
+        <div class="d-section">
+          <div class="d-title">Summary</div>
+          <p id="result-summary"></p>
+        </div>
+
+        <div class="d-section">
+          <div class="d-title">Matched Skills</div>
+          <div class="tags" id="matched-skills"></div>
+        </div>
+
+        <div class="d-section">
+          <div class="d-title">Missing Skills</div>
+          <div class="tags" id="missing-skills"></div>
+        </div>
+
+        <div class="sg-grid">
+          <div class="d-section">
+            <div class="d-title">Strengths</div>
+            <ul class="blist" id="strengths-list"></ul>
+          </div>
+          <div class="d-section">
+            <div class="d-title">Gaps</div>
+            <ul class="blist" id="gaps-list"></ul>
+          </div>
+        </div>
+
+      </div><!-- .details-card -->
+    </div><!-- .results-layout -->
+  </section><!-- #results -->
+
+</main>
+
+<!-- Spinner overlay -->
+<div id="spinner" hidden>
+  <div class="spin-ring"></div>
+  <div class="spin-label">Analysing with Claude…</div>
+</div>
+
+<!-- Toast container -->
+<div id="toasts"></div>
+
+<script>
+'use strict';
+
+// ── State ────────────────────────────────────────────────────────────────────
+const files = { resume: null, jd: null };
+
+// ── Boot ─────────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  initPanel('resume');
+  initPanel('jd');
+  document.getElementById('match-btn').addEventListener('click', handleSubmit);
+  document.getElementById('new-search-btn').addEventListener('click', resetUI);
+});
+
+// ── Panel wiring ─────────────────────────────────────────────────────────────
+function initPanel(side) {
+  // Mode buttons
+  document.querySelectorAll(`.mode-btn[data-side="${side}"]`).forEach(btn =>
+    btn.addEventListener('click', () => activateMode(side, btn.dataset.mode))
+  );
+
+  // Drop zone click → open file picker (ignore the clear button)
+  const zone  = document.getElementById(`${side}-zone`);
+  const input = document.getElementById(`${side}-file-input`);
+  zone.addEventListener('click', e => {
+    if (!e.target.closest('.fz-clear')) input.click();
+  });
+
+  // Drag-and-drop
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+  zone.addEventListener('dragleave', e => {
+    if (!zone.contains(e.relatedTarget)) zone.classList.remove('drag-over');
+  });
+  zone.addEventListener('drop', e => {
+    e.preventDefault();
+    zone.classList.remove('drag-over');
+    const f = e.dataTransfer.files[0];
+    if (f) applyFile(side, f);
+  });
+
+  // Native file input
+  input.addEventListener('change', () => {
+    if (input.files[0]) applyFile(side, input.files[0]);
+  });
+
+  // Clear button
+  document.getElementById(`${side}-clear`).addEventListener('click', e => {
+    e.stopPropagation();
+    clearFile(side);
+  });
+}
+
+function activateMode(side, mode) {
+  document.querySelectorAll(`.mode-btn[data-side="${side}"]`).forEach(btn =>
+    btn.classList.toggle('active', btn.dataset.mode === mode)
+  );
+  const textarea = document.getElementById(`${side}-text`);
+  const zone     = document.getElementById(`${side}-zone`);
+  if (mode === 'text') {
+    textarea.style.display = '';
+    zone.style.display = 'none';
+    clearFile(side);
+  } else {
+    textarea.style.display = 'none';
+    zone.style.display = '';
+  }
+}
+
+function applyFile(side, file) {
+  files[side] = file;
+  document.getElementById(`${side}-zone`).classList.add('has-file');
+  document.getElementById(`${side}-idle`).style.display   = 'none';
+  document.getElementById(`${side}-picked`).style.display = '';
+  document.getElementById(`${side}-fname`).textContent    = file.name;
+}
+
+function clearFile(side) {
+  files[side] = null;
+  const zone = document.getElementById(`${side}-zone`);
+  zone.classList.remove('has-file');
+  document.getElementById(`${side}-idle`).style.display   = '';
+  document.getElementById(`${side}-picked`).style.display = 'none';
+  document.getElementById(`${side}-file-input`).value     = '';
+}
+
+// ── Submit ────────────────────────────────────────────────────────────────────
+async function handleSubmit() {
+  const resumeMode = activeMode('resume');
+  const jdMode     = activeMode('jd');
+
+  let endpoint, body, headers = {};
+
+  if (resumeMode === 'file' && jdMode === 'file') {
+    if (!files.resume) { toast('Select a resume file first.'); return; }
+    if (!files.jd)     { toast('Select a job description file first.'); return; }
+    endpoint = '/api/v1/match/upload';
+    body = new FormData();
+    body.append('resume_file', files.resume);
+    body.append('jd_file',     files.jd);
+
+  } else if (resumeMode === 'text' && jdMode === 'text') {
+    const rt = document.getElementById('resume-text').value.trim();
+    const jt = document.getElementById('jd-text').value.trim();
+    if (!rt)          { toast('Paste your resume text first.');          return; }
+    if (!jt)          { toast('Paste the job description first.');       return; }
+    if (rt.length < 50) { toast('Resume is too short (min 50 chars).'); return; }
+    if (jt.length < 50) { toast('Job description is too short (min 50 chars).'); return; }
+    endpoint = '/api/v1/match/text';
+    body = JSON.stringify({ resume: rt, job_description: jt });
+    headers['Content-Type'] = 'application/json';
+
+  } else {
+    toast('Set both panels to the same mode — either both Text or both File.');
+    return;
+  }
+
+  setLoading(true);
+
+  try {
+    const resp = await fetch(endpoint, { method: 'POST', body, headers });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => null);
+      const msg = err?.detail ?? `Server error ${resp.status}`;
+      throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+    }
+    renderResults(await resp.json());
+  } catch (err) {
+    toast(err.message || 'Unexpected error — check the console.');
+  } finally {
+    setLoading(false);
+  }
+}
+
+function activeMode(side) {
+  return document.querySelector(`.mode-btn[data-side="${side}"].active`)?.dataset.mode ?? 'text';
+}
+
+// ── Render results ────────────────────────────────────────────────────────────
+function renderResults({ report, model_used, processing_time_ms }) {
+  animateScore(report.overall_match_score);
+  renderRec(report.recommendation);
+
+  document.getElementById('result-summary').textContent = report.summary;
+  document.getElementById('result-meta').textContent =
+    `${model_used} · ${(processing_time_ms / 1000).toFixed(1)} s`;
+
+  renderTags('matched-skills', report.matched_skills, 'tag-green');
+  renderTags('missing-skills', report.missing_skills, 'tag-red');
+  renderBullets('strengths-list', report.strengths);
+  renderBullets('gaps-list',      report.gaps);
+
+  const section = document.getElementById('results');
+  section.hidden = false;
+  requestAnimationFrame(() =>
+    section.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  );
+}
+
+function animateScore(score) {
+  const CIRC  = 251.33;
+  const fill  = document.getElementById('ring-fill');
+  const label = document.getElementById('ring-score');
+  const color = score >= 70 ? 'var(--green)' : score >= 40 ? 'var(--amber)' : 'var(--red)';
+
+  // Reset dashoffset without transition, then animate
+  fill.style.transition = 'none';
+  fill.style.strokeDashoffset = CIRC;
+  fill.getBoundingClientRect();        // force reflow
+  fill.style.transition = '';
+  fill.style.strokeDashoffset = CIRC * (1 - score / 100);
+  fill.style.stroke = color;
+
+  // Count-up animation for the number
+  const duration = 900, start = performance.now();
+  (function tick(now) {
+    const t = Math.min((now - start) / duration, 1);
+    const ease = 1 - Math.pow(1 - t, 3);
+    label.textContent = Math.round(score * ease);
+    label.style.fill  = color;
+    if (t < 1) requestAnimationFrame(tick);
+  })(start);
+}
+
+function renderRec(rec) {
+  const el  = document.getElementById('result-rec');
+  el.textContent = rec;
+  el.className = 'rec-badge ' +
+    (rec === 'Strong Match'   ? 'rec-strong'   :
+     rec === 'Moderate Match' ? 'rec-moderate' : 'rec-weak');
+}
+
+function renderTags(id, items, cls) {
+  const el = document.getElementById(id);
+  el.innerHTML = items.length
+    ? items.map(s => `<span class="tag ${cls}">${esc(s)}</span>`).join('')
+    : '<span class="empty-note">None identified</span>';
+}
+
+function renderBullets(id, items) {
+  document.getElementById(id).innerHTML =
+    items.map(i => `<li>${esc(i)}</li>`).join('');
+}
+
+// ── UI helpers ────────────────────────────────────────────────────────────────
+function setLoading(on) {
+  document.getElementById('spinner').hidden  = !on;
+  document.getElementById('match-btn').disabled = on;
+}
+
+function resetUI() {
+  document.getElementById('results').hidden = true;
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function toast(msg, type = 'error') {
+  const container = document.getElementById('toasts');
+  const el = document.createElement('div');
+  el.className = `toast toast-${type}`;
+  el.textContent = msg;
+  container.appendChild(el);
+
+  // Two rAF frames to ensure the element is painted before the transition fires
+  requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('in')));
+
+  setTimeout(() => {
+    el.classList.remove('in');
+    el.addEventListener('transitionend', () => el.remove(), { once: true });
+  }, 5000);
+}
+
+function esc(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+</script>
+</body>
+</html>
