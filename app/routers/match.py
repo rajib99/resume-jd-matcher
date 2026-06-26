@@ -1,8 +1,9 @@
 import asyncio
 import logging
 import time
+from typing import Optional
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 
 from app.dependencies import get_matcher_service
 from app.models.request import MatchRequest
@@ -174,3 +175,79 @@ def _validate_min_length(text: str, field_name: str, min_chars: int) -> None:
                 f"(minimum {min_chars} characters)."
             ),
         )
+
+
+# ── POST /match/ (unified — each side can be text or file independently) ────
+
+
+@router.post(
+    "/",
+    response_model=MatchResponse,
+    summary="Match resume and JD — each side can be plain text or an uploaded file",
+    status_code=status.HTTP_200_OK,
+)
+async def match_unified(
+    resume_file: Optional[UploadFile] = File(None),
+    resume_text: Optional[str] = Form(None),
+    jd_file: Optional[UploadFile] = File(None),
+    jd_text: Optional[str] = Form(None),
+    service: MatcherService = Depends(get_matcher_service),
+) -> MatchResponse:
+    start = time.monotonic()
+    logger.info("POST /match/ received")
+
+    r_text = await _resolve_input(resume_file, resume_text, "resume")
+    j_text = await _resolve_input(jd_file, jd_text, "job_description")
+
+    _validate_min_length(r_text, "resume", min_chars=50)
+    _validate_min_length(j_text, "job_description", min_chars=50)
+
+    try:
+        result = await asyncio.to_thread(
+            service.match,
+            resume_text=r_text,
+            job_description=j_text,
+        )
+    except Exception as exc:
+        logger.error("match/ agent error: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Agent error: {exc}",
+        ) from exc
+
+    elapsed = int((time.monotonic() - start) * 1000)
+    logger.info("POST /match/ completed in %d ms", elapsed)
+    return result
+
+
+async def _resolve_input(
+    file: Optional[UploadFile],
+    text: Optional[str],
+    field_label: str,
+) -> str:
+    """Return plain text from whichever input was supplied."""
+    has_file = file is not None and bool(file.filename)
+    has_text = bool(text and text.strip())
+
+    if has_file and has_text:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Supply either a file or text for '{field_label}', not both.",
+        )
+    if has_file:
+        content = await _read_upload(file, f"{field_label}_file")  # type: ignore[arg-type]
+        try:
+            return extract_text_from_file(
+                content, file.filename or "", file.content_type or ""  # type: ignore[union-attr]
+            )
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=str(exc),
+            ) from exc
+    if has_text:
+        return text.strip()  # type: ignore[union-attr]
+    raise HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        detail=f"Provide either a file or text for '{field_label}'.",
+    )
