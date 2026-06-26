@@ -33,4 +33,4 @@ app.include_router(match_router, prefix="/api/v1")
 
 @app.get("/health", tags=["health"])
 async def health() -> dict[str, str]:
-    return {"status": "ok"}
+    return {"status": "ok", "version": app.version}
