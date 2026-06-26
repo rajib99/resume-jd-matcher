@@ -1,5 +1,3 @@
-import pytest
-
 from app.services.parser import parse_job_description, parse_resume
 
 

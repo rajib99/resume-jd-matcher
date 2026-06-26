@@ -1,8 +1,9 @@
 services:
   api:
     container_name: resume-jd-matcher
-    # Set IMAGE_TAG to deploy a specific version (e.g. IMAGE_TAG=1.2.3 docker compose up -d)
-    image: resume-jd-matcher:${IMAGE_TAG:-latest}
+    # Local dev:  IMAGE_TAG=latest (default)
+    # Production: DOCKER_IMAGE=user/resume-jd-matcher  IMAGE_TAG=sha-abc1234
+    image: ${DOCKER_IMAGE:-resume-jd-matcher}:${IMAGE_TAG:-latest}
     restart: unless-stopped
     environment:
       # Required — compose will refuse to start if this is unset or empty

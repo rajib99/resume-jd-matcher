@@ -25,8 +25,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
-from app.dependencies import get_matcher_service
-from app.main import app
 from app.services.parser import (
     extract_text_from_docx,
     extract_text_from_file,
@@ -168,7 +166,7 @@ class TestExtractTextFromFile:
 
     def test_dispatches_docx_by_extension_when_octet_stream(self, sample_resume):
         with patch("app.services.parser.extract_text_from_docx", return_value=sample_resume) as m:
-            result = extract_text_from_file(b"bytes", "resume.docx", _OCTET_CT)
+            extract_text_from_file(b"bytes", "resume.docx", _OCTET_CT)
         m.assert_called_once()
 
     def test_pdf_extension_beats_missing_content_type(self, sample_resume):
