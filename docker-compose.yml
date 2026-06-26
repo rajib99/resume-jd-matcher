@@ -1,26 +1,28 @@
 services:
   api:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: runtime
-    image: resume-jd-matcher:latest
+    container_name: resume-jd-matcher
+    # Set IMAGE_TAG to deploy a specific version (e.g. IMAGE_TAG=1.2.3 docker compose up -d)
+    image: resume-jd-matcher:${IMAGE_TAG:-latest}
     restart: unless-stopped
-    env_file:
-      - .env
     environment:
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-      - CLAUDE_MODEL=${CLAUDE_MODEL:-claude-sonnet-4-6}
-      - LOG_LEVEL=${LOG_LEVEL:-INFO}
-      - ENVIRONMENT=${ENVIRONMENT:-production}
+      # Required — compose will refuse to start if this is unset or empty
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:?ANTHROPIC_API_KEY must be set in the environment}
+      # Optional overrides — sensible production defaults shown
+      CLAUDE_MODEL:  ${CLAUDE_MODEL:-claude-sonnet-4-6}
+      LOG_LEVEL:     ${LOG_LEVEL:-INFO}
+      ENVIRONMENT:   ${ENVIRONMENT:-production}
     networks:
       - web
+    # No ports exposed to the host — traffic arrives through the reverse proxy
+    # on the shared "web" network (e.g. Traefik, Nginx).
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      test: >
+        CMD /venv/bin/python -c
+        "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 10s
+      start_period: 15s
 
 networks:
   web:
