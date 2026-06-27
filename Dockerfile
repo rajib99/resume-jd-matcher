@@ -52,7 +52,7 @@ EXPOSE 8000
 
 # Probes the /health endpoint; python -c raises an exception (exit 1) on
 # network error or non-200 response, which marks the container unhealthy.
-HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+HEALTHCHECK --interval=10s --timeout=10s --start-period=15s --retries=3 \
   CMD /venv/bin/python -c \
       "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"
 

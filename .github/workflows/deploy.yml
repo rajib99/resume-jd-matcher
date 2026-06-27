@@ -115,7 +115,7 @@ jobs:
 
             # ── Health-check gate (60 s window, 5 s poll) ──────────────────
             echo "▶ Waiting for container to become healthy…"
-            deadline=60
+            deadline=120
             elapsed=0
             while [ "$elapsed" -lt "$deadline" ]; do
               status=$(docker inspect --format='{{.State.Health.Status}}' resume-jd-matcher 2>/dev/null || echo "not_found")
