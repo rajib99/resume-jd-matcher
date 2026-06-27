@@ -28,6 +28,10 @@ LABEL org.opencontainers.image.title="Resume JD Matcher" \
       org.opencontainers.image.description="AI-powered resume / job-description matching" \
       org.opencontainers.image.base.name="python:${PYTHON_VERSION}-slim"
 
+# curl for health check probe; clean up apt lists to keep image small
+RUN apt-get update && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
+
 # Non-root user with explicit UID/GID for reproducible file ownership
 RUN groupadd --system --gid 1001 appuser && \
     useradd  --system --uid 1001 --gid 1001 \
@@ -50,11 +54,8 @@ ENV PYTHONUNBUFFERED=1 \
 
 EXPOSE 8000
 
-# Probes the /health endpoint; python -c raises an exception (exit 1) on
-# network error or non-200 response, which marks the container unhealthy.
-HEALTHCHECK --interval=10s --timeout=10s --start-period=15s --retries=3 \
-  CMD /venv/bin/python -c \
-      "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"
+HEALTHCHECK --interval=10s --timeout=5s --start-period=30s --retries=3 \
+  CMD curl -f http://127.0.0.1:8000/health || exit 1
 
 # Exec form with full venv path — no shell interpolation, no PATH lookup
 CMD ["/venv/bin/uvicorn", "app.main:app", \
