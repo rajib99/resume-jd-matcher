@@ -1,7 +1,6 @@
 import asyncio
 import logging
 import time
-from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 
@@ -187,10 +186,10 @@ def _validate_min_length(text: str, field_name: str, min_chars: int) -> None:
     status_code=status.HTTP_200_OK,
 )
 async def match_unified(
-    resume_file: Optional[UploadFile] = File(None),
-    resume_text: Optional[str] = Form(None),
-    jd_file: Optional[UploadFile] = File(None),
-    jd_text: Optional[str] = Form(None),
+    resume_file: UploadFile | None = File(None),
+    resume_text: str | None = Form(None),
+    jd_file: UploadFile | None = File(None),
+    jd_text: str | None = Form(None),
     service: MatcherService = Depends(get_matcher_service),
 ) -> MatchResponse:
     start = time.monotonic()
@@ -221,8 +220,8 @@ async def match_unified(
 
 
 async def _resolve_input(
-    file: Optional[UploadFile],
-    text: Optional[str],
+    file: UploadFile | None,
+    text: str | None,
     field_label: str,
 ) -> str:
     """Return plain text from whichever input was supplied."""
