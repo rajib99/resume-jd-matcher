@@ -15,7 +15,7 @@ RUN pip install --no-cache-dir uv
 COPY requirements.txt .
 
 RUN uv venv /venv && \
-    uv pip install --python /venv/python --no-cache -r requirements.txt
+    uv pip install --python /venv/bin/python --no-cache -r requirements.txt
 
 # ── runtime ───────────────────────────────────────────────────────────────────
 FROM python:${PYTHON_VERSION}-slim AS runtime
