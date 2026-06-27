@@ -54,7 +54,7 @@ EXPOSE 8000
 # network error or non-200 response, which marks the container unhealthy.
 HEALTHCHECK --interval=10s --timeout=10s --start-period=15s --retries=3 \
   CMD /venv/bin/python -c \
-      "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"
+      "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"
 
 # Exec form with full venv path — no shell interpolation, no PATH lookup
 CMD ["/venv/bin/uvicorn", "app.main:app", \

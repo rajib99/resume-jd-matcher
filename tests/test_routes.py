@@ -202,12 +202,11 @@ class TestFrontendRoute:
         body = resp.text
         assert "Resume JD Matcher" in body
         assert "match-btn" in body
-        assert "/api/v1/match/text" in body or "match/text" in body
+        assert "/api/v1/match/" in body
 
-    def test_html_references_both_endpoints(self, test_client):
+    def test_html_references_unified_endpoint(self, test_client):
         resp = test_client.get("/")
-        assert "match/text" in resp.text
-        assert "match/upload" in resp.text
+        assert "/api/v1/match/" in resp.text
 
 
 # ════════════════════════════════════════════════════════════════════════════
