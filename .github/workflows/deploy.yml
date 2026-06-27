@@ -113,29 +113,22 @@ jobs:
             echo "▶ Pulling $DOCKER_IMAGE:$IMAGE_TAG"
             docker compose up -d --pull always --remove-orphans
 
-            # ── Health-check gate (60 s window, 5 s poll) ──────────────────
-            echo "▶ Waiting for container to become healthy…"
-            deadline=120
+            # ── Readiness gate: poll /health via docker exec ───────────────
+            echo "▶ Waiting for app to be ready…"
+            deadline=60
             elapsed=0
             while [ "$elapsed" -lt "$deadline" ]; do
-              status=$(docker inspect --format='{{.State.Health.Status}}' resume-jd-matcher 2>/dev/null || echo "not_found")
-              if [ "$status" = "healthy" ]; then
-                echo "✓ Container healthy after ${elapsed}s"
+              if docker exec resume-jd-matcher curl -sf http://127.0.0.1:8000/health; then
+                echo "✓ App ready after ${elapsed}s"
                 break
               fi
-              if [ "$status" = "unhealthy" ]; then
-                echo "✗ Container is unhealthy"
+              if [ "$elapsed" -ge "$((deadline - 5))" ]; then
+                echo "✗ App not ready within ${deadline}s — curl output above"
                 echo "--- last 50 log lines ---"
                 docker logs resume-jd-matcher --tail 50 || true
                 exit 1
               fi
-              if [ "$elapsed" -eq "$((deadline - 5))" ]; then
-                echo "✗ Container did not become healthy within ${deadline}s"
-                echo "--- last 50 log lines ---"
-                docker logs resume-jd-matcher --tail 50 || true
-                exit 1
-              fi
-              echo "  [${elapsed}s/${deadline}s] status=${status}"
+              echo "  [${elapsed}s/${deadline}s] not ready yet, retrying…"
               sleep 5
               elapsed=$((elapsed + 5))
             done
