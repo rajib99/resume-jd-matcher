@@ -12,18 +12,10 @@ services:
       GROQ_MODEL:  ${GROQ_MODEL:-llama-3.3-70b-versatile}
       LOG_LEVEL:     ${LOG_LEVEL:-INFO}
       ENVIRONMENT:   ${ENVIRONMENT:-production}
+    ports:
+      - "127.0.0.1:8000:8000"
     networks:
       - web
-    # No ports exposed to the host — traffic arrives through the reverse proxy
-    # on the shared "web" network (e.g. Traefik, Nginx).
-    healthcheck:
-      test: >
-        CMD /venv/bin/python -c
-        "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 15s
 
 networks:
   web:
